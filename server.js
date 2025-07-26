@@ -83,7 +83,7 @@ app.get('/', (req, res) => {
     });
 });
 
-// Endpoint para obtener QR (muy útil para Render)
+// En el endpoint /qr, modificar para devolver URL de imagen:
 app.get('/qr', (req, res) => {
     if (isConnected) {
         return res.json({
@@ -93,9 +93,11 @@ app.get('/qr', (req, res) => {
     }
 
     if (qrCodeData) {
+        // Convertir QR data a URL de imagen
+        const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrCodeData)}&size=300x300`;
         res.json({
             status: 'pending',
-            qr: qrCodeData,
+            qr: qrImageUrl,  // URL de imagen en lugar de texto QR
             message: 'Escanea este código QR con WhatsApp'
         });
     } else {
