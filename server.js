@@ -6,18 +6,14 @@ const path = require('path');
 
 const app = express();
 
-// Puerto para Render (importante: usar process.env.PORT)
 const PORT = process.env.PORT || 3000;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Directorio para sesiones (Render permite /tmp)
 const SESSION_DIR = process.env.RENDER ? '/tmp/sessions' : './sessions';
 
-// Cliente de WhatsApp
 const client = new Client({
     authStrategy: new LocalAuth({
         clientId: 'whatsapp-service',
@@ -37,11 +33,9 @@ const client = new Client({
     }
 });
 
-// Variables para almacenar QR y estado
 let qrCodeData = '';
 let isConnected = false;
 
-// Eventos de WhatsApp
 client.on('qr', (qr) => {
     console.log('=== ESCANEA ESTE CÓDIGO QR ===');
     qrcode.generate(qr, { small: true });
@@ -58,33 +52,26 @@ client.on('ready', () => {
 client.on('disconnected', (reason) => {
     console.log(' WhatsApp desconectado:', reason);
     isConnected = false;
-    // Intentar reconectar
-    client.initialize();
+    setTimeout(() => {
+        client.initialize();
+    }, 5000);
 });
 
-client.on('message', async (message) => {
-    console.log('Mensaje recibido:', message.body);
-
-    // Auto-respuesta simple
-    if (message.body === '!ping') {
-        client.sendMessage(message.from, 'pong! 🏓');
-    }
-});
-
-// Iniciar cliente
 client.initialize();
 
-// Rutas API
 app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('/status', (req, res) => {
     res.json({
-        message: 'WhatsApp Service API - Render',
-        status: isConnected ? 'connected' : 'connecting',
+        connected: isConnected,
+        service: 'WhatsApp Service',
         timestamp: new Date().toISOString()
     });
 });
 
-// En el endpoint /qr, modificar para devolver URL de imagen:
-app.get('/qr', (req, res) => {
+app.get('/qr', async (req, res) => {
     if (isConnected) {
         return res.json({
             status: 'connected',
@@ -92,12 +79,18 @@ app.get('/qr', (req, res) => {
         });
     }
 
+    if (!client.isReady()) {
+        return res.json({
+            status: 'waiting',
+            message: 'Esperando inicialización de WhatsApp...'
+        });
+    }
+
     if (qrCodeData) {
-        // Convertir QR data a URL de imagen
         const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrCodeData)}&size=300x300`;
         res.json({
             status: 'pending',
-            qr: qrImageUrl,  // URL de imagen en lugar de texto QR
+            qr: qrImageUrl,
             message: 'Escanea este código QR con WhatsApp'
         });
     } else {
@@ -108,7 +101,6 @@ app.get('/qr', (req, res) => {
     }
 });
 
-// Endpoint para enviar mensaje
 app.post('/send-message', async (req, res) => {
     try {
         if (!isConnected) {
@@ -135,7 +127,6 @@ app.post('/send-message', async (req, res) => {
             messageId: result.id._serialized,
             timestamp: new Date().toISOString()
         });
-
     } catch (error) {
         res.status(500).json({
             success: false,
@@ -144,25 +135,14 @@ app.post('/send-message', async (req, res) => {
     }
 });
 
-// Endpoint para verificar estado
-app.get('/status', (req, res) => {
-    res.json({
-        connected: isConnected,
-        service: 'WhatsApp Service',
-        platform: client.info?.platform,
-        pushname: client.info?.pushname,
-        timestamp: new Date().toISOString()
-    });
-});
-
-// Iniciar servidor
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Servidor WhatsApp corriendo en puerto ${PORT}`);
-    console.log(`📱 Accede a /qr para obtener el código QR`);
-    console.log(`📊 Status endpoint: /status`);
 });
 
-module.exports = app;
+setInterval(() => {
+    fetch(`http://localhost:${PORT}/status`)
+        .catch(err => console.log('Keep alive ping'));
+}, 300000);
 
 /*const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');

@@ -5,8 +5,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WhatsApp Service</title>
-    <!-- Cargar librería QRCode.js -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -87,7 +85,7 @@
 
 <body>
     <div class="container">
-        <h1> WhatsApp Service - API</h1>
+        <h1> WhatsApp Service - Render</h1>
 
         <div id="status" class="status disconnected">
             <h3>Estado: Cargando...</h3>
@@ -96,6 +94,7 @@
         <div>
             <button onclick="checkStatus()">Actualizar Estado</button>
             <button onclick="getQR()">Obtener Código QR</button>
+            <button onclick="restartWhatsApp()">Reiniciar WhatsApp</button>
         </div>
 
         <div id="debug-messages"></div>
@@ -142,7 +141,6 @@ curl -X POST https://tu-app.onrender.com/send-message \
                 const response = await fetch('/qr');
                 const data = await response.json();
 
-                // Mostrar datos de debug
                 const debugDiv = document.getElementById('debug-messages');
                 debugDiv.innerHTML = `<strong>Debug:</strong><pre>${JSON.stringify(data, null, 2)}</pre>`;
                 debugDiv.style.display = 'block';
@@ -152,28 +150,13 @@ curl -X POST https://tu-app.onrender.com/send-message \
                 if (data.status === 'connected') {
                     qrContainer.innerHTML = '<h3>✅ WhatsApp ya está conectado</h3>';
                 } else if (data.qr) {
-                    // Generar QR usando la librería con el texto QR
                     qrContainer.innerHTML = `
                         <h3>Escanea este código QR:</h3>
-                        <div id="qrcode" style="display: inline-block; padding: 20px; background: white; border-radius: 10px;"></div>
+                        <div id="qrcode">
+                            <img src="${data.qr}" alt="Código QR" style="max-width: 300px; height: auto;">
+                        </div>
                         <p><strong>Instrucciones:</strong> Abre WhatsApp → Configuración → WhatsApp Web → Escanea este código</p>
                     `;
-
-                    // Generar el código QR a partir del texto
-                    QRCode.toCanvas(document.getElementById('qrcode'), data.qr, {
-                        width: 300,
-                        height: 300,
-                        margin: 2,
-                        color: {
-                            dark: '#000000',
-                            light: '#ffffff'
-                        }
-                    }, function (error) {
-                        if (error) {
-                            console.error('Error generando QR:', error);
-                            qrContainer.innerHTML = '<h3>❌ Error generando código QR</h3>';
-                        }
-                    });
                 } else {
                     qrContainer.innerHTML = '<h3>⏳ Esperando código QR...</h3>';
                 }
@@ -183,10 +166,19 @@ curl -X POST https://tu-app.onrender.com/send-message \
             }
         }
 
-        // Actualizar estado cada 30 segundos
+        async function restartWhatsApp() {
+            try {
+                const response = await fetch('/restart');
+                const data = await response.json();
+                console.log('Restart status:', data);
+                checkStatus(); // Actualizar estado
+            } catch (error) {
+                console.error('Error al reiniciar WhatsApp:', error);
+            }
+        }
+
         setInterval(checkStatus, 30000);
 
-        // Cargar estado inicial
         window.onload = checkStatus;
     </script>
 </body>
