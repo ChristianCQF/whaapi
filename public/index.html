@@ -5,6 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WhatsApp Service</title>
+    <!-- Cargar librería QRCode.js -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -57,7 +59,7 @@
             text-align: center;
         }
 
-        #qr-code {
+        #qrcode {
             display: inline-block;
             padding: 20px;
             background: white;
@@ -72,16 +74,20 @@
             overflow-x: auto;
         }
 
-        .loading {
-            color: #666;
-            font-style: italic;
+        #debug-messages {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            display: none;
         }
     </style>
 </head>
 
 <body>
     <div class="container">
-        <h1> WhatsApp Service - Render API</h1>
+        <h1> WhatsApp Service - Render</h1>
 
         <div id="status" class="status disconnected">
             <h3>Estado: Cargando...</h3>
@@ -92,6 +98,7 @@
             <button onclick="getQR()">Obtener Código QR</button>
         </div>
 
+        <div id="debug-messages"></div>
         <div id="qr-container"></div>
 
         <h3>Endpoints API:</h3>
@@ -114,20 +121,6 @@ curl -X POST https://tu-app.onrender.com/send-message \
     </div>
 
     <script>
-        // Librería QRCode.js (incluida inline para funcionar sin CDN)
-        const QRCode = (function () {
-            // Función simplificada para generar QR como imagen base64
-            function generateQR(text, size = 256) {
-                // Esta es una implementación muy básica
-                // En producción, usarías una librería completa como qrcode.js
-                return `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(text)}&size=${size}x${size}`;
-            }
-
-            return {
-                generateQR: generateQR
-            };
-        })();
-
         async function checkStatus() {
             try {
                 const response = await fetch('/status');
@@ -149,21 +142,38 @@ curl -X POST https://tu-app.onrender.com/send-message \
                 const response = await fetch('/qr');
                 const data = await response.json();
 
+                // Mostrar datos de debug
+                const debugDiv = document.getElementById('debug-messages');
+                debugDiv.innerHTML = `<strong>Debug:</strong><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                debugDiv.style.display = 'block';
+
                 const qrContainer = document.getElementById('qr-container');
 
                 if (data.status === 'connected') {
                     qrContainer.innerHTML = '<h3>✅ WhatsApp ya está conectado</h3>';
                 } else if (data.qr) {
-                    // Generar imagen QR usando API externa
-                    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(data.qr)}&size=300x300`;
-
+                    // Generar QR usando la librería con el texto QR
                     qrContainer.innerHTML = `
                         <h3>Escanea este código QR:</h3>
-                        <div id="qr-code">
-                            <img src="${qrImageUrl}" alt="Código QR" style="max-width: 300px; height: auto;">
-                        </div>
+                        <div id="qrcode" style="display: inline-block; padding: 20px; background: white; border-radius: 10px;"></div>
                         <p><strong>Instrucciones:</strong> Abre WhatsApp → Configuración → WhatsApp Web → Escanea este código</p>
                     `;
+
+                    // Generar el código QR a partir del texto
+                    QRCode.toCanvas(document.getElementById('qrcode'), data.qr, {
+                        width: 300,
+                        height: 300,
+                        margin: 2,
+                        color: {
+                            dark: '#000000',
+                            light: '#ffffff'
+                        }
+                    }, function (error) {
+                        if (error) {
+                            console.error('Error generando QR:', error);
+                            qrContainer.innerHTML = '<h3>❌ Error generando código QR</h3>';
+                        }
+                    });
                 } else {
                     qrContainer.innerHTML = '<h3>⏳ Esperando código QR...</h3>';
                 }
