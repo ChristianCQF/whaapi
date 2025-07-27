@@ -3,17 +3,23 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
-
 const PORT = process.env.PORT || 3000;
 
+// Permitir CORS y JSON
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
+// Crear carpeta de sesiones según entorno
 const SESSION_DIR = process.env.RENDER ? '/tmp/sessions' : './sessions';
+if (!fs.existsSync(SESSION_DIR)) {
+    fs.mkdirSync(SESSION_DIR, { recursive: true });
+}
 
+// Crear cliente WhatsApp
 const client = new Client({
     authStrategy: new LocalAuth({
         clientId: 'whatsapp-service',
@@ -33,9 +39,11 @@ const client = new Client({
     }
 });
 
+// Variables de estado
 let qrCodeData = '';
 let isConnected = false;
 
+// Eventos del cliente
 client.on('qr', (qr) => {
     console.log('=== ESCANEA ESTE CÓDIGO QR ===');
     qrcode.generate(qr, { small: true });
@@ -50,15 +58,17 @@ client.on('ready', () => {
 });
 
 client.on('disconnected', (reason) => {
-    console.log(' WhatsApp desconectado:', reason);
+    console.log('⚠️ WhatsApp desconectado:', reason);
     isConnected = false;
     setTimeout(() => {
         client.initialize();
     }, 5000);
 });
 
+// Inicializar cliente
 client.initialize();
 
+// Rutas
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -79,22 +89,15 @@ app.get('/qr', async (req, res) => {
         });
     }
 
-    if (!client.isReady()) {
-        return res.json({
-            status: 'waiting',
-            message: 'Esperando inicialización de WhatsApp...'
-        });
-    }
-
     if (qrCodeData) {
         const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrCodeData)}&size=300x300`;
-        res.json({
+        return res.json({
             status: 'pending',
             qr: qrImageUrl,
             message: 'Escanea este código QR con WhatsApp'
         });
     } else {
-        res.json({
+        return res.json({
             status: 'waiting',
             message: 'Esperando código QR...'
         });
@@ -135,14 +138,31 @@ app.post('/send-message', async (req, res) => {
     }
 });
 
+// Endpoint para reiniciar WhatsApp
+app.get('/restart', async (req, res) => {
+    try {
+        console.log('♻️ Reiniciando cliente WhatsApp...');
+        isConnected = false;
+        await client.destroy();
+        setTimeout(() => {
+            client.initialize();
+        }, 2000);
+        res.json({ success: true, message: 'Cliente reiniciándose...' });
+    } catch (err) {
+        console.error('Error al reiniciar:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Mantener vivo (puedes eliminarlo si usas UptimeRobot)
+setInterval(() => {
+    console.log('⏳ Keep alive ping');
+}, 300000);
+
+// Iniciar servidor
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Servidor WhatsApp corriendo en puerto ${PORT}`);
 });
-
-setInterval(() => {
-    fetch(`http://localhost:${PORT}/status`)
-        .catch(err => console.log('Keep alive ping'));
-}, 300000);
 
 /*const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
