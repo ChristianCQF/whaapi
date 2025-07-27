@@ -4,165 +4,156 @@ const qrcode = require('qrcode-terminal');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const chromium = require('@sparticuz/chromium'); // 👈 IMPORTANTE
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// Permitir CORS y JSON
+// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Crear carpeta de sesiones según entorno
+// Crear carpeta de sesiones
 const SESSION_DIR = process.env.RENDER ? '/tmp/sessions' : './sessions';
 if (!fs.existsSync(SESSION_DIR)) {
     fs.mkdirSync(SESSION_DIR, { recursive: true });
 }
 
-// Crear cliente WhatsApp
-const client = new Client({
-    authStrategy: new LocalAuth({
-        clientId: 'whatsapp-service',
-        dataPath: SESSION_DIR
-    }),
-    puppeteer: {
-        headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--disable-gpu'
-        ]
-    }
-});
-
-// Variables de estado
+// Estado global
 let qrCodeData = '';
 let isConnected = false;
 
-// Eventos del cliente
-client.on('qr', (qr) => {
-    console.log('=== ESCANEA ESTE CÓDIGO QR ===');
-    qrcode.generate(qr, { small: true });
-    qrCodeData = qr;
-    console.log('==============================');
-});
-
-client.on('ready', () => {
-    isConnected = true;
-    console.log('✅ WhatsApp conectado exitosamente!');
-    qrCodeData = '';
-});
-
-client.on('disconnected', (reason) => {
-    console.log('⚠️ WhatsApp desconectado:', reason);
-    isConnected = false;
-    setTimeout(() => {
-        client.initialize();
-    }, 5000);
-});
-
-// Inicializar cliente
-client.initialize();
-
-// Rutas
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-app.get('/status', (req, res) => {
-    res.json({
-        connected: isConnected,
-        service: 'WhatsApp Service',
-        timestamp: new Date().toISOString()
+// Inicialización asíncrona para usar chromium.executablePath()
+(async () => {
+    const client = new Client({
+        authStrategy: new LocalAuth({
+            clientId: 'whatsapp-service',
+            dataPath: SESSION_DIR
+        }),
+        puppeteer: {
+            headless: true,
+            executablePath: await chromium.executablePath(),
+            args: chromium.args,
+            defaultViewport: chromium.defaultViewport
+        }
     });
-});
 
-app.get('/qr', async (req, res) => {
-    if (isConnected) {
-        return res.json({
-            status: 'connected',
-            message: 'WhatsApp ya está conectado'
-        });
-    }
+    // Eventos de cliente
+    client.on('qr', (qr) => {
+        console.log('=== ESCANEA ESTE CÓDIGO QR ===');
+        qrcode.generate(qr, { small: true });
+        qrCodeData = qr;
+        console.log('==============================');
+    });
 
-    if (qrCodeData) {
-        const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrCodeData)}&size=300x300`;
-        return res.json({
-            status: 'pending',
-            qr: qrImageUrl,
-            message: 'Escanea este código QR con WhatsApp'
-        });
-    } else {
-        return res.json({
-            status: 'waiting',
-            message: 'Esperando código QR...'
-        });
-    }
-});
+    client.on('ready', () => {
+        isConnected = true;
+        qrCodeData = '';
+        console.log('✅ WhatsApp conectado exitosamente!');
+    });
 
-app.post('/send-message', async (req, res) => {
-    try {
-        if (!isConnected) {
-            return res.status(503).json({
-                success: false,
-                error: 'WhatsApp no está conectado. Espera a que se conecte.'
-            });
-        }
-
-        const { phoneNumber, message } = req.body;
-
-        if (!phoneNumber || !message) {
-            return res.status(400).json({
-                success: false,
-                error: 'phoneNumber y message son requeridos'
-            });
-        }
-
-        const chatId = `${phoneNumber}@c.us`;
-        const result = await client.sendMessage(chatId, message);
-
-        res.json({
-            success: true,
-            messageId: result.id._serialized,
-            timestamp: new Date().toISOString()
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-});
-
-// Endpoint para reiniciar WhatsApp
-app.get('/restart', async (req, res) => {
-    try {
-        console.log('♻️ Reiniciando cliente WhatsApp...');
+    client.on('disconnected', (reason) => {
+        console.log('⚠️ WhatsApp desconectado:', reason);
         isConnected = false;
-        await client.destroy();
         setTimeout(() => {
             client.initialize();
-        }, 2000);
-        res.json({ success: true, message: 'Cliente reiniciándose...' });
-    } catch (err) {
-        console.error('Error al reiniciar:', err);
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
+        }, 5000);
+    });
 
-// Mantener vivo (puedes eliminarlo si usas UptimeRobot)
-setInterval(() => {
-    console.log('⏳ Keep alive ping');
-}, 300000);
+    // Inicializar cliente
+    client.initialize();
 
-// Iniciar servidor
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Servidor WhatsApp corriendo en puerto ${PORT}`);
-});
+    // Rutas
+    app.get('/', (req, res) => {
+        res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    });
+
+    app.get('/status', (req, res) => {
+        res.json({
+            connected: isConnected,
+            service: 'WhatsApp Service',
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    app.get('/qr', async (req, res) => {
+        if (isConnected) {
+            return res.json({
+                status: 'connected',
+                message: 'WhatsApp ya está conectado'
+            });
+        }
+        if (qrCodeData) {
+            const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrCodeData)}&size=300x300`;
+            return res.json({
+                status: 'pending',
+                qr: qrImageUrl,
+                message: 'Escanea este código QR con WhatsApp'
+            });
+        } else {
+            return res.json({
+                status: 'waiting',
+                message: 'Esperando código QR...'
+            });
+        }
+    });
+
+    app.post('/send-message', async (req, res) => {
+        try {
+            if (!isConnected) {
+                return res.status(503).json({
+                    success: false,
+                    error: 'WhatsApp no está conectado. Espera a que se conecte.'
+                });
+            }
+            const { phoneNumber, message } = req.body;
+            if (!phoneNumber || !message) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'phoneNumber y message son requeridos'
+                });
+            }
+            const chatId = `${phoneNumber}@c.us`;
+            const result = await client.sendMessage(chatId, message);
+            res.json({
+                success: true,
+                messageId: result.id._serialized,
+                timestamp: new Date().toISOString()
+            });
+        } catch (error) {
+            console.error('Error al enviar mensaje:', error);
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+
+    app.get('/restart', async (req, res) => {
+        try {
+            console.log('♻️ Reiniciando cliente WhatsApp...');
+            isConnected = false;
+            await client.destroy();
+            setTimeout(() => {
+                client.initialize();
+            }, 2000);
+            res.json({ success: true, message: 'Cliente reiniciándose...' });
+        } catch (err) {
+            console.error('Error al reiniciar:', err);
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
+    // Keep alive
+    setInterval(() => {
+        console.log('⏳ Keep alive ping');
+    }, 300000);
+
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`🚀 Servidor WhatsApp corriendo en puerto ${PORT}`);
+    });
+})();
+
 
 /*const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
