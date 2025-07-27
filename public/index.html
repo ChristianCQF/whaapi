@@ -80,12 +80,17 @@
             margin: 10px 0;
             display: none;
         }
+
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
     </style>
 </head>
 
 <body>
     <div class="container">
-        <h1>WhatsApp Service - API REST 1</h1>
+        <h1>WhatsApp Service</h1>
 
         <div id="status" class="status disconnected">
             <h3>Estado: Cargando...</h3>
@@ -98,15 +103,17 @@
         </div>
 
         <div id="debug-messages"></div>
-        <div id="qr-container"></div>
+        <div id="qr-container">
+            <p class="loading">Haz clic en "Obtener Código QR" para generar el código</p>
+        </div>
 
-        <h3>Endpoints API:</h3>
+        <h3>Endpoints API REST:</h3>
         <pre>
 GET  /              - Estado del servicio
 GET  /status        - Información detallada
 GET  /qr            - Obtener código QR
 POST /send-message  - Enviar mensaje WhatsApp
-    </pre>
+        </pre>
 
         <h3>Ejemplo de envío:</h3>
         <pre>
@@ -116,7 +123,7 @@ curl -X POST https://tu-app.onrender.com/send-message \
     "phoneNumber": "54911XXXXXXXX",
     "message": "Hola desde Render!"
   }'
-    </pre>
+        </pre>
     </div>
 
     <script>
@@ -125,15 +132,19 @@ curl -X POST https://tu-app.onrender.com/send-message \
                 const response = await fetch('/status');
                 const data = await response.json();
 
-                // Nuestro server devuelve { ready, statusMessage }
                 const statusDiv = document.getElementById('status');
                 statusDiv.className = 'status ' + (data.ready ? 'connected' : 'disconnected');
                 statusDiv.innerHTML = `
-          <h3>Estado: ${data.ready ? '✅ Conectado' : '⚠️ Desconectado'}</h3>
-          <p>${data.statusMessage}</p>
-        `;
+                    <h3>Estado: ${data.ready ? '✅ Conectado' : '⚠️ Desconectado'}</h3>
+                    <p>${data.statusMessage}</p>
+                    ${data.hasQr ? '<p><strong>🔔 Hay un código QR disponible para escanear</strong></p>' : ''}
+                `;
             } catch (error) {
                 console.error('Error:', error);
+                document.getElementById('status').innerHTML = `
+                    <h3>Estado: ❌ Error</h3>
+                    <p>No se pudo conectar con el servidor</p>
+                `;
             }
         }
 
@@ -144,7 +155,11 @@ curl -X POST https://tu-app.onrender.com/send-message \
                 const debugDiv = document.getElementById('debug-messages');
 
                 if (!response.ok) {
-                    qrContainer.innerHTML = '<h3>❌ No hay QR disponible</h3>';
+                    const errorData = await response.json();
+                    qrContainer.innerHTML = `
+                        <h3>❌ No hay QR disponible</h3>
+                        <p>${errorData.error || 'El servicio no ha generado un código QR todavía'}</p>
+                    `;
                     debugDiv.style.display = 'none';
                     return;
                 }
@@ -158,41 +173,72 @@ curl -X POST https://tu-app.onrender.com/send-message \
                 if (data.status === 'ok' && data.qrImage) {
                     // Tenemos imagen QR
                     qrContainer.innerHTML = `
-        <h3>Escanea este código QR:</h3>
-        <div id="qrcode">
-          <img src="${data.qrImage}" alt="Código QR" style="max-width:300px; height:auto;">
-        </div>
-        <p><strong>Instrucciones:</strong> Abre WhatsApp → Configuración → WhatsApp Web → Escanea este código</p>
-      `;
+                        <h3>📱 Escanea este código QR:</h3>
+                        <div id="qrcode">
+                            <img src="${data.qrImage}" alt="Código QR de WhatsApp" style="max-width:300px; height:auto;">
+                        </div>
+                        <p><strong>📋 Instrucciones:</strong> Abre WhatsApp → Configuración → WhatsApp Web → Escanea este código</p>
+                    `;
                 } else if (data.status === 'no_qr') {
-                    qrContainer.innerHTML = '<h3>⏳ Esperando código QR...</h3>';
-                } else if (data.status === 'connected') {
-                    qrContainer.innerHTML = '<h3>✅ WhatsApp ya está conectado</h3>';
+                    qrContainer.innerHTML = `
+                        <h3>⏳ Esperando código QR...</h3>
+                        <p>El sistema está generando el código. Haz clic en "Actualizar Estado" y vuelve a intentar.</p>
+                    `;
                 } else {
-                    qrContainer.innerHTML = '<h3>❌ No hay QR disponible</h3>';
+                    qrContainer.innerHTML = `
+                        <h3>❌ No hay QR disponible</h3>
+                        <p>Estado: ${data.status}</p>
+                    `;
                 }
 
             } catch (error) {
                 console.error('Error obteniendo QR:', error);
-                document.getElementById('qr-container').innerHTML = '<h3>❌ Error obteniendo QR</h3>';
+                document.getElementById('qr-container').innerHTML = `
+                    <h3>❌ Error obteniendo QR</h3>
+                    <p>Detalles: ${error.message}</p>
+                `;
             }
         }
 
-
         async function restartWhatsApp() {
+            if (!confirm('¿Estás seguro de que quieres reiniciar el cliente de WhatsApp?')) {
+                return;
+            }
+
             try {
+                document.getElementById('qr-container').innerHTML = '<p class="loading">🔄 Reiniciando cliente de WhatsApp...</p>';
                 const response = await fetch('/restart');
                 const data = await response.json();
                 console.log('Restart status:', data);
+                alert(data.message || 'Cliente reiniciado');
                 checkStatus();
+
+                // Esperar un momento y actualizar el QR
+                setTimeout(() => {
+                    getQR();
+                }, 3000);
             } catch (error) {
                 console.error('Error al reiniciar WhatsApp:', error);
+                alert('Error al reiniciar: ' + error.message);
             }
         }
 
         // Actualizar estado cada 30 segundos
         setInterval(checkStatus, 30000);
-        window.onload = checkStatus;
+        window.onload = function () {
+            checkStatus();
+            // Mostrar QR automáticamente si hay uno disponible
+            setTimeout(() => {
+                fetch('/status')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.hasQr) {
+                            getQR();
+                        }
+                    })
+                    .catch(console.error);
+            }, 1000);
+        };
     </script>
 </body>
 

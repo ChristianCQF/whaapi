@@ -139,7 +139,7 @@ app.listen(port, () => {
 
 /*
 git add .
-git commit -m "feat: integrar @sparticuz/chromium para Render 3.6"
+git commit -m "feat: integrar @sparticuz/chromium para Render 3.7"
 git push origin main
 
 */
