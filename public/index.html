@@ -85,7 +85,7 @@
 
 <body>
     <div class="container">
-        <h1> WhatsApp Service - API</h1>
+        <h1>WhatsApp Service - API</h1>
 
         <div id="status" class="status disconnected">
             <h3>Estado: Cargando...</h3>
@@ -106,7 +106,7 @@ GET  /              - Estado del servicio
 GET  /status        - Información detallada
 GET  /qr            - Obtener código QR
 POST /send-message  - Enviar mensaje WhatsApp
-        </pre>
+    </pre>
 
         <h3>Ejemplo de envío:</h3>
         <pre>
@@ -116,7 +116,7 @@ curl -X POST https://tu-app.onrender.com/send-message \
     "phoneNumber": "54911XXXXXXXX",
     "message": "Hola desde Render!"
   }'
-        </pre>
+    </pre>
     </div>
 
     <script>
@@ -125,12 +125,13 @@ curl -X POST https://tu-app.onrender.com/send-message \
                 const response = await fetch('/status');
                 const data = await response.json();
 
+                // Nuestro server devuelve { ready, statusMessage }
                 const statusDiv = document.getElementById('status');
-                statusDiv.className = 'status ' + (data.connected ? 'connected' : 'disconnected');
+                statusDiv.className = 'status ' + (data.ready ? 'connected' : 'disconnected');
                 statusDiv.innerHTML = `
-                    <h3>Estado: ${data.connected ? '✅ Conectado' : '⚠️ Desconectado'}</h3>
-                    <p>Última actualización: ${new Date(data.timestamp).toLocaleString()}</p>
-                `;
+          <h3>Estado: ${data.ready ? '✅ Conectado' : '⚠️ Desconectado'}</h3>
+          <p>${data.statusMessage}</p>
+        `;
             } catch (error) {
                 console.error('Error:', error);
             }
@@ -139,6 +140,10 @@ curl -X POST https://tu-app.onrender.com/send-message \
         async function getQR() {
             try {
                 const response = await fetch('/qr');
+                if (!response.ok) {
+                    document.getElementById('qr-container').innerHTML = '<h3>❌ No hay QR disponible</h3>';
+                    return;
+                }
                 const data = await response.json();
 
                 const debugDiv = document.getElementById('debug-messages');
@@ -146,22 +151,19 @@ curl -X POST https://tu-app.onrender.com/send-message \
                 debugDiv.style.display = 'block';
 
                 const qrContainer = document.getElementById('qr-container');
-
-                if (data.status === 'connected') {
-                    qrContainer.innerHTML = '<h3>✅ WhatsApp ya está conectado</h3>';
-                } else if (data.qr) {
+                if (data.qrImage) {
                     qrContainer.innerHTML = `
-                        <h3>Escanea este código QR:</h3>
-                        <div id="qrcode">
-                            <img src="${data.qr}" alt="Código QR" style="max-width: 300px; height: auto;">
-                        </div>
-                        <p><strong>Instrucciones:</strong> Abre WhatsApp → Configuración → WhatsApp Web → Escanea este código</p>
-                    `;
+            <h3>Escanea este código QR:</h3>
+            <div id="qrcode">
+              <img src="${data.qrImage}" alt="Código QR" style="max-width:300px; height:auto;">
+            </div>
+            <p><strong>Instrucciones:</strong> Abre WhatsApp → Configuración → WhatsApp Web → Escanea este código</p>
+          `;
                 } else {
                     qrContainer.innerHTML = '<h3>⏳ Esperando código QR...</h3>';
                 }
             } catch (error) {
-                console.error('Error:', error);
+                console.error('Error obteniendo QR:', error);
                 document.getElementById('qr-container').innerHTML = '<h3>❌ Error obteniendo QR</h3>';
             }
         }
@@ -171,14 +173,14 @@ curl -X POST https://tu-app.onrender.com/send-message \
                 const response = await fetch('/restart');
                 const data = await response.json();
                 console.log('Restart status:', data);
-                checkStatus(); // Actualizar estado
+                checkStatus();
             } catch (error) {
                 console.error('Error al reiniciar WhatsApp:', error);
             }
         }
 
+        // Actualizar estado cada 30 segundos
         setInterval(checkStatus, 30000);
-
         window.onload = checkStatus;
     </script>
 </body>
