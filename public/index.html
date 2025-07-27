@@ -140,33 +140,44 @@ curl -X POST https://tu-app.onrender.com/send-message \
         async function getQR() {
             try {
                 const response = await fetch('/qr');
+                const qrContainer = document.getElementById('qr-container');
+                const debugDiv = document.getElementById('debug-messages');
+
                 if (!response.ok) {
-                    document.getElementById('qr-container').innerHTML = '<h3>❌ No hay QR disponible</h3>';
+                    qrContainer.innerHTML = '<h3>❌ No hay QR disponible</h3>';
+                    debugDiv.style.display = 'none';
                     return;
                 }
+
                 const data = await response.json();
 
-                const debugDiv = document.getElementById('debug-messages');
+                // Mostrar debug
                 debugDiv.innerHTML = `<strong>Debug:</strong><pre>${JSON.stringify(data, null, 2)}</pre>`;
                 debugDiv.style.display = 'block';
 
-                const qrContainer = document.getElementById('qr-container');
-                if (data.qrImage) {
+                if (data.status === 'ok' && data.qrImage) {
+                    // Tenemos imagen QR
                     qrContainer.innerHTML = `
-            <h3>Escanea este código QR:</h3>
-            <div id="qrcode">
-              <img src="${data.qrImage}" alt="Código QR" style="max-width:300px; height:auto;">
-            </div>
-            <p><strong>Instrucciones:</strong> Abre WhatsApp → Configuración → WhatsApp Web → Escanea este código</p>
-          `;
-                } else {
+        <h3>Escanea este código QR:</h3>
+        <div id="qrcode">
+          <img src="${data.qrImage}" alt="Código QR" style="max-width:300px; height:auto;">
+        </div>
+        <p><strong>Instrucciones:</strong> Abre WhatsApp → Configuración → WhatsApp Web → Escanea este código</p>
+      `;
+                } else if (data.status === 'no_qr') {
                     qrContainer.innerHTML = '<h3>⏳ Esperando código QR...</h3>';
+                } else if (data.status === 'connected') {
+                    qrContainer.innerHTML = '<h3>✅ WhatsApp ya está conectado</h3>';
+                } else {
+                    qrContainer.innerHTML = '<h3>❌ No hay QR disponible</h3>';
                 }
+
             } catch (error) {
                 console.error('Error obteniendo QR:', error);
                 document.getElementById('qr-container').innerHTML = '<h3>❌ Error obteniendo QR</h3>';
             }
         }
+
 
         async function restartWhatsApp() {
             try {

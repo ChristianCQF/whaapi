@@ -61,17 +61,33 @@ app.get('/', (req, res) => {
 app.get('/status', (req, res) => {
     res.json({ ready, statusMessage, hasQr: !!lastQr });
 });
-
 app.get('/qr', async (req, res) => {
-    if (!lastQr) return res.status(404).json({ error: 'No hay QR disponible.' });
     try {
-        // Generar imagen base64
+        if (!lastQr) {
+            return res.status(404).json({
+                status: 'no_qr',
+                error: 'No hay QR disponible todavía.'
+            });
+        }
+
+        // Generar imagen base64 a partir del texto QR
         const qrImage = await QRCode.toDataURL(lastQr);
-        res.json({ qr: lastQr, qrImage });
+
+        res.json({
+            status: 'ok',
+            qr: lastQr,         // texto crudo del QR
+            qrImage: qrImage    // imagen en base64 para <img src="...">
+        });
     } catch (err) {
-        res.status(500).json({ error: 'Error generando QR', details: err.message });
+        console.error('Error generando QR:', err);
+        res.status(500).json({
+            status: 'error',
+            error: 'Error generando QR',
+            details: err.message
+        });
     }
 });
+
 
 app.post('/send-message', async (req, res) => {
     const { phoneNumber, message } = req.body;
@@ -98,6 +114,13 @@ app.listen(port, () => {
     console.log(`🚀 Servidor corriendo en puerto ${port}`);
 });
 
+
+/*
+git add .
+git commit -m "feat: integrar @sparticuz/chromium para Render 3.3"
+git push origin main
+
+*/
 
 /*const express = require('express');
 const { Client, LocalAuth } = require('whatsapp-web.js');
