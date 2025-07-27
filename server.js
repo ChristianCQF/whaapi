@@ -4,6 +4,7 @@ const cors = require('cors');
 const chromium = require('@sparticuz/chromium'); // 👈 Para Render/Vercel
 const QRCode = require('qrcode'); // Generar imagen QR
 
+
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -15,6 +16,8 @@ let client;       // lo inicializamos luego
 let lastQr = null;
 let ready = false;
 let statusMessage = 'Esperando código QR...';
+const path = require('path');
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Función para iniciar el cliente con chromium
 async function startClient() {
@@ -67,7 +70,8 @@ startClient().catch((err) => {
 
 // Endpoints
 app.get('/', (req, res) => {
-    res.json({ status: ready ? 'connected' : 'waiting', message: statusMessage });
+    //res.json({ status: ready ? 'connected' : 'waiting', message: statusMessage });
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get('/status', (req, res) => {
@@ -135,7 +139,7 @@ app.listen(port, () => {
 
 /*
 git add .
-git commit -m "feat: integrar @sparticuz/chromium para Render 3.5"
+git commit -m "feat: integrar @sparticuz/chromium para Render 3.6"
 git push origin main
 
 */
